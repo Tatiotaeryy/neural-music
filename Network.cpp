@@ -44,8 +44,8 @@ public:
 				input_file >> Data[i][j];
 	};
 	T get(int i, int j) { if (i >= size_a || j >= size_b) { std::cout << "Wrong index in get()\n"; return NAN; } return Data[i][j]; }
-	void set(T value, int i, int j) { if (i >= size_a || j >= size_b) { std::cout << "Wrong index in set()\n"; } Data[i][j] = value; }
-	void add(T value, int i, int j) { if (i >= size_a || j >= size_b) { std::cout << "Wrong index in add()\n"; } Data[i][j] += value; }
+	void set(T value, int i, int j) { if (i >= size_a || j >= size_b) { std::cout << "Wrong index in set()\n"; return; } Data[i][j] = value; }
+	void add(T value, int i, int j) { if (i >= size_a || j >= size_b) { std::cout << "Wrong index in add()\n"; return; } Data[i][j] += value; }
 	int get_size_a() { return size_a; }
 	int get_size_b() { return size_b; }
 	Matrix Transpose() {
@@ -63,12 +63,12 @@ public:
 				Data[i][j] = B.get(i, j);
 	}
 	Matrix operator* (Matrix &B){
-		if (size_b == B.get_size_b()) {
-			Matrix <T> A(size_a, B.get_size_a());
+		if (size_b == B.get_size_a()) {
+			Matrix <T> A(size_a, B.get_size_b());
 			for (int i = 0; i < size_a; ++i)
-				for (int j = 0; j < B.get_size_a(); ++j)
+				for (int j = 0; j < B.get_size_b(); ++j)
 					for (int k = 0; k < size_b; ++k)
-						A.add(Data[k][j] + B.get(i, k), i, j);
+						A.add(Data[i][k] * B.get(k, j), i, j);
 			return A;
 		}
 	std::cout << "ERROR OCCURED WHILE MULTIPLYING MATRIXES\n";
@@ -199,7 +199,7 @@ int main() {
 	RegressionNeuron Test;
 	LogisticNeuron Test2;
 	double lambda = 0;
-
+	
 	X.SetMatrix(input_file);
 	X.PrintMatrix();
 	Y.SetMatrix(input_file);
