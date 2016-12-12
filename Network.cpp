@@ -9,12 +9,12 @@ private:
 	int size_a, size_b;
 	Matrix() {};
 public:
-	Matrix(int size_a, int column_size) {
+	Matrix(int size_a, int  size_b) {
 		this->size_a = size_a;
-		this->size_b = column_size;
+		this->size_b = size_b;
 		Data = new T*[size_a];
 		for (int i = 0; i < size_a; ++i)
-			Data[i] = new T[size_b * sizeof(T)];
+			Data[i] = new T[size_b];
 		for (int i = 0; i < size_a; ++i)
 			for (int j = 0; j < size_b; ++j)
 				Data[i][j] = 0;
@@ -24,7 +24,7 @@ public:
 		size_b = size;
 		Data = new T*[size_a];
 		for (int i = 0; i < size_a; ++i)
-			Data[i] = new T[size_b * sizeof(T)];
+			Data[i] = new T[size_b];
 		for (int i = 0; i < size_a; ++i)
 			for (int j = 0; j < size_b; ++j)
 				Data[i][j] = 0;
@@ -43,9 +43,9 @@ public:
 			for (int j = 0; j < size_b; ++j)
 				input_file >> Data[i][j];
 	};
-	T get(int i, int j) { return Data[i][j]; }
-	void set(T value, int i, int j) { Data[i][j] = value; }
-	void add(T value, int i, int j) { Data[i][j] += value; }
+	T get(int i, int j) { if (i >= size_a || j >= size_b) { std::cout << "Wrong index in get()\n"; return NAN; } return Data[i][j]; }
+	void set(T value, int i, int j) { if (i >= size_a || j >= size_b) { std::cout << "Wrong index in set()\n"; } Data[i][j] = value; }
+	void add(T value, int i, int j) { if (i >= size_a || j >= size_b) { std::cout << "Wrong index in add()\n"; } Data[i][j] += value; }
 	int get_size_a() { return size_a; }
 	int get_size_b() { return size_b; }
 	Matrix Transpose() {
@@ -141,12 +141,19 @@ public:
 	}
 	T product(Matrix &X, Matrix &Y) {
 		T prod = 0;
-		for (int i = 0; i < X.get_size_a(); ++i)
-			for (int j = 0; j < X.get_size_b(); ++j)
-				for (int k = 0; k < Y.get_size_a(); ++k)
-					for (int l = 0; l < Y.get_size_b(); ++l)
-						prod += X.get(i, j) * Y.get(k, l);
-		//std::cout << "Product is " << prod << "\n";
+		if (X.get_size_a() == Y.get_size_a() && X.get_size_b() == Y.get_size_b())
+			for (int i = 0; i < X.get_size_a(); ++i)
+				for (int j = 0; j < X.get_size_b(); ++j)
+					prod += X.get(i, j)*Y.get(i, j);
+		else
+			if (X.get_size_b() == Y.get_size_a() && X.get_size_a() == Y.get_size_b())
+				for (int i = 0; i < X.get_size_a(); ++i)
+					for (int j = 0; j < X.get_size_b(); ++j)
+						prod += X.get(i, j)*Y.get(j, i);
+			else {
+				std::cout << "ERROR IN CALCULATING SCALAR PRODUCT\n";
+				return NAN;
+			}
 		return prod;
 	}
 };
