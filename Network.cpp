@@ -155,8 +155,12 @@ public:
 	double CostFunction(Matrix<double> &X, Matrix<double> &Y, Matrix<double> &Theta, double lambda) {
 		double summ = 0;
 		for (int i = 0; i < X.get_size_a(); ++i) summ += pow(X.product(X.GetRow(i), Theta) - Y.get(i, 0), 2);
-		return summ / X.get_size_a() / 2;
-
+		//Regularization part
+		for (int i = 0; i < Theta.get_size_a(); ++i) summ += Theta.get(i, 0)*Theta.get(i, 0) * lambda;
+		summ = summ / X.get_size_a() / 2;
+		
+		
+		return summ;
 	}
 };
 class LogisticNeuron {
@@ -167,7 +171,8 @@ public:
 		for (int i = 0; i < X.get_size_a(); ++i) {
 			double h = 1 / (1 + exp(X.product(X.GetRow(i), Theta)));
 			summ += Y.get(i, 0) * log(h) + (1 - Y.get(i, 0)) * log(1 - h); }
-
+		//Regularization part
+		for (int i = 0; i < Theta.get_size_a(); ++i) summ -= Theta.get(i, 0)*Theta.get(i, 0) * lambda/2;
 		return -summ / X.get_size_a();
 
 	}
