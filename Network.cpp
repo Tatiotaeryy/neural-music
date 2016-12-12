@@ -82,7 +82,7 @@ public:
 			return A;
 		}
 	Matrix operator+ (Matrix &B) {
-		if (size_b == B.get_size_a() && size_a == B.get_size_b()) {
+		if (size_a == B.get_size_a() && size_b == B.get_size_b()) {
 			Matrix <T> A(size_a, size_b);
 			for (int i = 0; i < size_a; ++i)
 				for (int j = 0; j < size_b; ++j)
@@ -104,7 +104,7 @@ public:
 		return 0;
 	}
 	Matrix operator- (Matrix &B) {
-		if (size_b == B.get_size_a() && size_a == B.get_size_b()) {
+		if (size_b == B.get_size_b() && size_a == B.get_size_a()) {
 			Matrix <T> A(size_a, size_b);
 			for (int i = 0; i < size_a; ++i)
 				for (int j = 0; j < size_b; ++j)
@@ -139,7 +139,7 @@ public:
 		//Column.PrintMatrix();
 		return Column;
 	}
-	T product(Matrix &X, Matrix &Y) {
+	T product(Matrix &X, Matrix &Y)	 {
 		T prod = 0;
 		if (X.get_size_a() == Y.get_size_a() && X.get_size_b() == Y.get_size_b())
 			for (int i = 0; i < X.get_size_a(); ++i)
@@ -156,9 +156,13 @@ public:
 			}
 		return prod;
 	}
+	T vector_norm(Matrix&X) {return sqrt(product(X, X));}
 };
 class RegressionNeuron{
 public:
+	double H(Matrix<double> &X, Matrix<double> &Theta) {
+		return X.product(X, Theta);
+	}
 	double CostFunction(Matrix<double> &X, Matrix<double> &Y, Matrix<double> &Theta, double lambda) {
 		double summ = 0;
 		for (int i = 0; i < X.get_size_a(); ++i) summ += pow(X.product(X.GetRow(i), Theta) - Y.get(i, 0), 2);
@@ -169,20 +173,61 @@ public:
 		
 		return summ;
 	}
+	void GradientDescent(double alpha, Matrix<double> &X, Matrix<double> &Y, Matrix<double> &Theta, double lambda) {
+		double buffer = 1;
+		int k = 0;
+		Matrix <double> Gradient_vector(Theta.get_size_a(), 1);
+		while (k < 10000 && buffer > 0.00001) {
+			//std::cout << "k is " << k<<"\n";
+			buffer = Theta.vector_norm(Theta);
+			for (int i = 0; i < Theta.get_size_a(); ++i) {
+				for (int j = 0; j < X.get_size_a(); ++j)
+					Gradient_vector.add((H(X.GetRow(j), Theta) - Y.get(j, 0))*X.get(j, i), i, 0);
+				Gradient_vector.add(Theta.get(i, 0) * lambda, i, 0);
+				Gradient_vector = Gradient_vector * (alpha / Theta.get_size_a());
+			}
+			Theta = Theta - Gradient_vector;
+			buffer = abs(buffer - Theta.vector_norm(Theta));
+			++k;
+		}
+	};
 };
 class LogisticNeuron {
 public:
+	double H(Matrix<double> &X, Matrix<double> &Theta) {
+		return 1/(1+exp(-X.product(X, Theta)));
+	}
 	double CostFunction(Matrix<double> &X, Matrix<double> &Y, Matrix<double> &Theta, double lambda) {
 		double summ = 0;
-		
+		double h = 0;
 		for (int i = 0; i < X.get_size_a(); ++i) {
-			double h = 1 / (1 + exp(X.product(X.GetRow(i), Theta)));
-			summ += Y.get(i, 0) * log(h) + (1 - Y.get(i, 0)) * log(1 - h); }
+			h = H(X.GetRow(i), Theta);
+			//std::cout << "H is " << h << "\n";
+			//std::cout << "Product is " << X.product(X.GetRow(i), Theta) << "\n";
+			summ += Y.get(i, 0) * log(h) + (1 - Y.get(i, 0)) * log(1 - h);
+			//std::cout << "Summ is " << summ << "\n";
+		}
 		//Regularization part
-		for (int i = 0; i < Theta.get_size_a(); ++i) summ -= Theta.get(i, 0)*Theta.get(i, 0) * lambda/2;
+		for (int i = 0; i < Theta.get_size_a(); ++i)  summ -= Theta.get(i, 0)*Theta.get(i, 0) * lambda / 2 ;
 		return -summ / X.get_size_a();
 
 	}
+	void GradientDescent(double alpha, Matrix<double> &X, Matrix<double> &Y, Matrix<double> &Theta, double lambda) {
+		double buffer = 1;
+	int k = 0;
+	Matrix <double> Gradient_vector(Theta.get_size_a(), 1);
+	while (k < 10000 && buffer > 0.00001) {
+		//std::cout << "k is " << k<<"\n";
+		buffer = Theta.vector_norm(Theta);
+		for (int i = 0; i < Theta.get_size_a(); ++i) {
+			for (int j = 0; j < X.get_size_a(); ++j)
+				Gradient_vector.add((H(X.GetRow(j), Theta) - Y.get(j, 0))*X.get(j,i), i, 0);
+			Gradient_vector.add(Theta.get(i, 0) * lambda, i, 0);
+			Gradient_vector = Gradient_vector * (alpha / Theta.get_size_a());}
+		Theta = Theta - Gradient_vector;
+		buffer = abs(buffer - Theta.vector_norm(Theta));
+		++k;}
+	};
 };
 
 int main() {
@@ -209,7 +254,12 @@ int main() {
 	input_file >> lambda;
 
 	std::cout<<"CostFunction for regression is "<<Test.CostFunction(X, Y, Theta, lambda)<<"\n";
+	Test.GradientDescent(1, X, Y, Theta, lambda);
+	std::cout << "CostFunction for regression is " << Test.CostFunction(X, Y, Theta, lambda) << "\n";
+
 	std::cout << "CostFunction for classification is " << Test2.CostFunction(X, Y, Theta, lambda)<<"\n";
+	Test2.GradientDescent(1, X, Y, Theta, lambda);
+	std::cout << "CostFunction for classification is " << Test2.CostFunction(X, Y, Theta, lambda) << "\n";
 	system("pause");
 	return 0;
 }
