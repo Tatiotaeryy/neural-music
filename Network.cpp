@@ -2,6 +2,7 @@
 #include <fstream>
 #include <cmath>
 #include <cstdlib>
+#include <malloc.h>
 
 template <typename T>
 class Matrix
@@ -12,11 +13,13 @@ private:
 
 	void free_data()
 	{
-		for (int i = 0; i < size_a; ++i)
-		{
-			delete[] Data[i];
+		if ((unsigned int)Data != 0xcdcdcdcd) {
+			for (int i = 0; i < size_a; ++i)
+			{
+				delete[] Data[i];
+			}
+			delete[] Data;
 		}
-		delete[] Data;
 	}
 public:
 	Matrix(int size_a, int  size_b) : size_a(size_a), size_b(size_b)
@@ -42,7 +45,7 @@ public:
 			}
 		}
 	}
-//	Matrix() { size_a = 0; size_b = 0; };
+	//	Matrix() { size_a = 0; size_b = 0; };
 	Matrix(Matrix &B) : size_a(B.get_size_a()), size_b(B.get_size_b()) {
 		Data = new T*[size_a];
 		for (int i = 0; i < size_a; ++i)
@@ -55,7 +58,7 @@ public:
 		}
 	}
 
-	void PrintMatrix() const  {
+	void PrintMatrix() const {
 		for (int i = 0; i < size_a; ++i) {
 			for (int j = 0; j < size_b; ++j)
 			{
@@ -259,8 +262,6 @@ public:
 				SubMatrix.set(Data[k][l], k, l - i);
 			}
 		}
-		//std::cout << "SubMatrix " << i << ":" << j<< "\n";
-		//SubMatrix.PrintMatrix();
 		return SubMatrix;
 	}
 	//ПЕРЕПИШИ
@@ -282,7 +283,7 @@ public:
 			return prod;
 	}
 	//НЕЗАБУДЬ
-	T vector_norm() const
+	T vector_norm()
 	{
 		return sqrt(product(*this, *this));
 	}
@@ -295,9 +296,16 @@ protected:
 	Matrix<double> * Input;
 	int size;
 public:
-	Neuron(int number_of_variables, Matrix<double> &Input) : Theta(number_of_variables, 1), size(number_of_variables), Input(new Matrix<double>(Input)) {}
+	Neuron(int number_of_variables, Matrix<double> &Input) : Theta(number_of_variables, 1), size(number_of_variables), Input(new Matrix<double>(Input))
+	{
+		for (int i = 0; i < Theta.get_size_a(); ++i)
+		{
+			Theta.set(1, i, 0);
+		}
+	}
 	virtual double H(int i) = 0;
 	virtual double CostFunction(Matrix<double> &Y, double lambda = 0) = 0;
+	virtual void ChangeInput(Matrix<double> &Input) = 0;
 	void GradientDescent(Matrix<double> &Y, double alpha, double lambda = 0)
 	{
 		double buffer = 1;
@@ -311,15 +319,17 @@ public:
 			{
 				for (int j = 0; j < Input->get_size_a(); ++j)
 				{
-					Gradient_vector.add((H(i) - Y.get(j, 0))*Input->get(j, i), i, 0);
+					Gradient_vector.add((H(i) - Y.get(j, 0))*(Input->get(j, i)), i, 0);
 				}
 				Gradient_vector.add(Theta.get(i, 0) * lambda, i, 0);
 				Gradient_vector = Gradient_vector * (alpha / Theta.get_size_a());
 			}
 			Theta = Theta - Gradient_vector;
-			buffer -= Theta.vector_norm());
+			buffer -= Theta.vector_norm();
 			++k;
 		}
+		std::cout << "Theta is" << "\n";
+		Theta.PrintMatrix();
 	}
 };
 class RegressionNeuron : public Neuron
@@ -340,8 +350,8 @@ public:
 		{
 			summ += pow(Theta.get(i, 0), 2) * lambda;
 		}
-		
-		summ /=  Input->get_size_a() * 2;
+
+		summ /= Input->get_size_a() * 2;
 		return summ;
 	}
 };
@@ -364,6 +374,11 @@ public:
 		return -summ / Input->get_size_a();
 
 	}
+	void ChangeInput(Matrix<double> &Input)
+	{
+		delete this->Input;
+		this->Input = new Matrix<double>(Input);
+	}
 };
 
 class NeuronLayer
@@ -371,19 +386,19 @@ class NeuronLayer
 	int num_of_examples;
 	int num_of_neurons;
 	Matrix <double> Input;
+	Matrix <double> Y;
 	Matrix <double> Output;
-	LogisticNeuron *Data;
+	Neuron ** Data;
 public:
-	NeuronLayer(int num_of_examples, int num_of_neurons, Matrix<double> &X) : 
+	NeuronLayer(int num_of_examples, int num_of_neurons, Matrix<double> &X, Matrix<double> &Y) :
 		Input(X),
+		Y(Y),
 		Output(num_of_examples, num_of_neurons),
 		num_of_examples(num_of_examples),
 		num_of_neurons(num_of_neurons)
 	{
-		Data = new LogisticNeuron[num_of_neurons](X.get_size_b(), X);
-	}
-	void SetLayer(double * input_size, double ** borders) {
-		for (int i = 0; i < num_of_neurons; ++i) Data[i].CreateNeuron(input_size[i], borders[i][0], borders[i][1], Input);
+		Data = (Neuron **)malloc(sizeof(Neuron*)*num_of_neurons);
+		Input = Input*(1 / 9.0);
 	}
 	void SetLayer(std::ifstream &input_file) {
 		int input_size, border_left, border_right;
@@ -392,14 +407,57 @@ public:
 			input_file >> input_size;
 			input_file >> border_left;
 			input_file >> border_right;
-			Data[i].CreateNeuron(input_size, border_left, border_right, Input);
+			Data[i] = new LogisticNeuron(input_size, Input.GetSubMatrix(border_left, border_right));
 		}
 	}
-
-
+	void SetupLayer()
+	{
+		for (int i = 0; i < num_of_neurons; ++i)
+		{
+			Data[i]->GradientDescent(Y, 1, 1);
+		}
+	}
+	Matrix<double>& get_output()
+	{
+		return Output;
+	}
+	void ChangeInput(Matrix<double> &Input)
+	{
+		std::ifstream input_file("Neuron_Setting.txt");
+		int input_size, border_left, border_right;
+		input_size = border_left = border_right = 0;
+		this->Input = Matrix<double>(Input*(1 / 9.0));
+		for (int i = 0; i < num_of_neurons; ++i)
+		{
+			input_file >> input_size;
+			input_file >> border_left;
+			input_file >> border_right;
+			Data[i]->ChangeInput(this->Input.GetSubMatrix(border_left, border_right));
+		}
+		num_of_examples = Input.get_size_a();
+		Output = Matrix<double>(num_of_examples, num_of_neurons);
+	}
+	void Work()
+	{
+		for (int i = 0; i < num_of_examples; ++i)
+		{
+			for (int j = 0; j < num_of_neurons; ++j)
+			{
+				if (Data[j]->H(i) > 0.5)
+				{
+					Output.set(1, i, j);
+				}
+				else
+				{
+					Output.set(0, i, j);
+				}
+			}
+		}
+	}
 };
 int main() {
 	std::ifstream input_file("text.txt");
+	std::ifstream input_neuron("Neuron_Setting.txt");
 	int number_of_examples;
 	int number_of_variables;
 	input_file >> number_of_examples;
@@ -408,17 +466,37 @@ int main() {
 	Matrix <double> Y(number_of_examples, 1);
 	X.ReadMatrix(input_file);
 	Y.ReadMatrix(input_file);
-
-	LogisticNeuron Output(6);
-
-	Matrix <double> Theta(number_of_variables, 1);
+	NeuronLayer MAIN_LAYER(number_of_examples, 6, X, Y);
+	MAIN_LAYER.SetLayer(input_neuron);
+	MAIN_LAYER.SetupLayer();
+	MAIN_LAYER.Work();
+	LogisticNeuron exit(6, MAIN_LAYER.get_output());
+	std::cout << "Output is\n";
+	MAIN_LAYER.get_output().PrintMatrix();
+	exit.GradientDescent(Y, 1, 1);
+	Matrix <double> test_set(1, number_of_variables);
+	int in1, in2, in3;
+	while (true)
+	{
+		std::cout << "Perinita pelease\n";
+		std::cin >> in1 >> in2 >> in3;
+		test_set.set(in1, 0, 0);
+		test_set.set(in2, 0, 1);
+		test_set.set(in3, 0, 2);
+		MAIN_LAYER.ChangeInput(test_set);
+		MAIN_LAYER.Work();
+		MAIN_LAYER.get_output().PrintMatrix();
+		exit.ChangeInput(MAIN_LAYER.get_output());
+		std::cout << "Hypothesis for " << in1 <<in2 <<in3 << " is " << exit.H(0) << "\n";
+		system("pause");
+	}
 	double lambda = 0;
-
-
-
+	
 	//Theta.ReadMatrix(input_file);
 	//Theta.PrintMatrix();
 	//input_file >> lambda;
-
+	system("pause");
 	return 0;
 }
+//Убрал free_data() в операторе =
+//Заюзал malloc
