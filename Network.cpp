@@ -57,7 +57,9 @@ public:
 			}
 		}
 	}
-
+	~Matrix() {
+		free_data();
+	}
 	void PrintMatrix() const {
 		for (int i = 0; i < size_a; ++i) {
 			for (int j = 0; j < size_b; ++j)
@@ -77,7 +79,18 @@ public:
 			}
 		}
 	};
-
+	void ReadRow(std::ifstream &input_file, int i) 
+		{
+		if (i < 0 || i >= size_a)
+		{
+			std::cout << "Wrong index in ReadRow()\n";
+			return;
+		}
+			for (int j = 0; j < size_b; ++j)
+			{
+				input_file >> Data[i][j];
+			}
+		};
 	T get(int i, int j) const
 	{
 		if (i < 0 || j < 0 || i >= size_a || j >= size_b)
@@ -288,7 +301,49 @@ public:
 		return sqrt(product(*this, *this));
 	}
 };
+class DATA {
+public:
+	int num_of_examples;
+	int num_of_variables;
+	Matrix<double> X;
+	Matrix<double> Y;
+	DATA(int a, int b, Matrix <double> &X, Matrix <double> &Y) :
+		num_of_examples(a), num_of_variables(b), X(X), Y(Y) {};
+	DATA(DATA &A) :
+		num_of_examples(A.num_of_examples),
+		num_of_variables(A.num_of_variables),
+		X(A.X), Y(A.Y) {};
+	DATA(std::ifstream &input_file, int num_of_examples, int num_of_variables) :
+		num_of_examples(num_of_examples), num_of_variables(num_of_variables),
+		X(num_of_examples, num_of_variables), Y(num_of_examples, 1)
+	{
+		for (int i = 0; i < num_of_examples; ++i)
+		{
+			X.ReadRow(input_file, i);
+			Y.ReadRow(input_file, i);
+		}
+	}
+	void ReadData(std::ifstream &input_file, int num_of_examples, int num_of_variables) {
+		Matrix <double> NewX(num_of_examples, num_of_variables);
+		Matrix <double> NewY(num_of_examples, 1); //НОВОГОДНЯЯ ПЕРЕМЕННАЯ!  =)
+		for (int i = 0; i < num_of_examples; ++i)
+		{
+			NewX.ReadRow(input_file, i);
+			NewY.ReadRow(input_file, i);
+		}
+		X = NewX;
+		Y = NewY;
+	}
+	DATA operator=(DATA &A)
+	{
+		return DATA(A);
+	}
+	~DATA() {
+		X.Matrix::~Matrix();
+		Y.Matrix::~Matrix();
+	}
 
+};
 class Neuron
 {
 protected:
@@ -385,20 +440,26 @@ class NeuronLayer
 {
 	int num_of_examples;
 	int num_of_neurons;
-	Matrix <double> Input;
-	Matrix <double> Y;
+	DATA INPUT;
 	Matrix <double> Output;
 	Neuron ** Data;
 public:
 	NeuronLayer(int num_of_examples, int num_of_neurons, Matrix<double> &X, Matrix<double> &Y) :
-		Input(X),
-		Y(Y),
+		INPUT(num_of_examples, X.get_size_b(), X, Y),
 		Output(num_of_examples, num_of_neurons),
 		num_of_examples(num_of_examples),
 		num_of_neurons(num_of_neurons)
 	{
 		Data = (Neuron **)malloc(sizeof(Neuron*)*num_of_neurons);
-		Input = Input*(1 / 9.0);
+		//INPUT.X = INPUT.X*(1 / 9.0);
+	}
+	NeuronLayer(int num_of_examples, int num_of_neurons, DATA &A) :
+		INPUT(A),
+		Output(num_of_examples, num_of_neurons),
+		num_of_examples(num_of_examples),
+		num_of_neurons(num_of_neurons)
+	{
+		Data = (Neuron **)malloc(sizeof(Neuron*)*num_of_neurons);
 	}
 	void SetLayer(std::ifstream &input_file) {
 		int input_size, border_left, border_right;
@@ -407,14 +468,14 @@ public:
 			input_file >> input_size;
 			input_file >> border_left;
 			input_file >> border_right;
-			Data[i] = new LogisticNeuron(input_size, Input.GetSubMatrix(border_left, border_right));
+			Data[i] = new LogisticNeuron(input_size, INPUT.X.GetSubMatrix(border_left, border_right));
 		}
 	}
-	void SetupLayer()
+	void SetupLayer(double alpha, double lambda)
 	{
 		for (int i = 0; i < num_of_neurons; ++i)
 		{
-			Data[i]->GradientDescent(Y, 1, 1);
+			Data[i]->GradientDescent(INPUT.Y, alpha, lambda);
 		}
 	}
 	Matrix<double>& get_output()
@@ -426,13 +487,13 @@ public:
 		std::ifstream input_file("Neuron_Setting.txt");
 		int input_size, border_left, border_right;
 		input_size = border_left = border_right = 0;
-		this->Input = Matrix<double>(Input*(1 / 9.0));
+		INPUT.X = Matrix<double>(INPUT.X*(1 / 9.0));
 		for (int i = 0; i < num_of_neurons; ++i)
 		{
 			input_file >> input_size;
 			input_file >> border_left;
 			input_file >> border_right;
-			Data[i]->ChangeInput(this->Input.GetSubMatrix(border_left, border_right));
+			Data[i]->ChangeInput(this->INPUT.X.GetSubMatrix(border_left, border_right));
 		}
 		num_of_examples = Input.get_size_a();
 		Output = Matrix<double>(num_of_examples, num_of_neurons);
@@ -445,35 +506,38 @@ public:
 			{
 				if (Data[j]->H(i) > 0.5)
 				{
-					Output.set(1, i, j);
+					Output.set(Data[j]->H(i), i, j);
 				}
 				else
 				{
-					Output.set(0, i, j);
+					Output.set(Data[j]->H(i), i, j);
 				}
 			}
 		}
 	}
 };
 int main() {
+	//Ввод обучающих данных
 	std::ifstream input_file("text.txt");
 	std::ifstream input_neuron("Neuron_Setting.txt");
 	int number_of_examples;
 	int number_of_variables;
+	double alpha, lambda;
 	input_file >> number_of_examples;
 	input_file >> number_of_variables;
-	Matrix <double> X(number_of_examples, number_of_variables);
-	Matrix <double> Y(number_of_examples, 1);
-	X.ReadMatrix(input_file);
-	Y.ReadMatrix(input_file);
-	NeuronLayer MAIN_LAYER(number_of_examples, 6, X, Y);
+	input_file >> alpha;
+	input_file >> lambda;
+	DATA MAIN_DATA(input_file, number_of_examples, number_of_variables);
+
+	//Создание и настройка слоя
+	NeuronLayer MAIN_LAYER(number_of_examples, 3, MAIN_DATA);
 	MAIN_LAYER.SetLayer(input_neuron);
-	MAIN_LAYER.SetupLayer();
+	MAIN_LAYER.SetupLayer(alpha, lambda);
 	MAIN_LAYER.Work();
-	LogisticNeuron exit(6, MAIN_LAYER.get_output());
+	LogisticNeuron exit(3, MAIN_LAYER.get_output());
 	std::cout << "Output is\n";
 	MAIN_LAYER.get_output().PrintMatrix();
-	exit.GradientDescent(Y, 1, 1);
+	exit.GradientDescent(MAIN_DATA.Y, alpha, lambda);
 	Matrix <double> test_set(1, number_of_variables);
 	int in1, in2, in3;
 	while (true)
@@ -487,16 +551,13 @@ int main() {
 		MAIN_LAYER.Work();
 		MAIN_LAYER.get_output().PrintMatrix();
 		exit.ChangeInput(MAIN_LAYER.get_output());
-		std::cout << "Hypothesis for " << in1 <<in2 <<in3 << " is " << exit.H(0) << "\n";
+		std::cout << "Hypothesis for " << in1 << in2 << in3 << " is " << exit.H(0) << "\n";
 		system("pause");
 	}
-	double lambda = 0;
-	
+
 	//Theta.ReadMatrix(input_file);
 	//Theta.PrintMatrix();
 	//input_file >> lambda;
 	system("pause");
 	return 0;
 }
-//Убрал free_data() в операторе =
-//Заюзал malloc
